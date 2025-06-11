@@ -8,6 +8,8 @@ import '../apps/stable/features/search/components/searchfields.scss';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
 import cardBuilder from 'components/cardbuilder/cardBuilder';
 import imageLoader from 'components/images/imageLoader';
+import libraryBrowser from '../scripts/libraryBrowser';
+import * as userSettings from '../scripts/settings/userSettings';
 
 const DEBOUNCE_DELAY_MS = 350;
 
@@ -17,25 +19,76 @@ class DiscoverTab {
         this.params = params;
         this.apiClient = window.ServerConnections?.currentApiClient?.() || null;
         this.lastQuery = '';
+        this.savedSortKey = 'discover-sort';
+        this.sortQuery = userSettings.loadQuerySettings(this.savedSortKey, {
+            SortBy: 'Name',
+            SortOrder: 'Ascending'
+        });
     }
 
-    onResume(options) {
+    onResume() {
         this.view.innerHTML = `
             <div class="padded-left padded-right searchFields">
-              <div class="searchFieldsInner flex align-items-center justify-content-center">
+              <div class="searchFieldsInner flex align-items-center justify-content-center" style="gap: 0.75em;">
                 <span class="searchfields-icon material-icons search" aria-hidden="true"></span>
-                <div class="inputContainer flex-grow" style="margin-bottom: 0;">
+                <div class="inputContainer flex-grow" style="margin-bottom: 0; display: flex; align-items: center;">
                   <input is="emby-input" id="discover-query" class="searchfields-txtSearch"
                          type="text" data-keyboard="true"
                          placeholder="${globalize.translate('Search')}"
-                         autocomplete="off" maxlength="40" autofocus />
+                         autocomplete="off" maxlength="40" autofocus
+                         style="height: 40px; line-height: 40px;" />
+                </div>
+                <div class="searchOptions flex align-items-center" style="height: 40px; gap: 0.25em;">
+                  <button is="paper-icon-button-light" class="btnSelectView autoSize" title="${globalize.translate('ButtonSelectView')}" style="height: 40px; display: flex; align-items: center;">
+                    <span class="material-icons view_comfy" aria-hidden="true"></span>
+                  </button>
+                  <button is="paper-icon-button-light" class="btnSort autoSize" title="${globalize.translate('Sort')}" style="height: 40px; display: flex; align-items: center;">
+                    <span class="material-icons sort_by_alpha" aria-hidden="true"></span>
+                  </button>
+                  <button is="paper-icon-button-light" class="btnFilter autoSize" title="${globalize.translate('Filter')}" style="height: 40px; display: flex; align-items: center;">
+                    <span class="material-icons filter_alt" aria-hidden="true"></span>
+                  </button>
                 </div>
               </div>
             </div>
             <div id="discover-results" class="padded-left padded-right" style="margin-top:2em;"></div>
         `;
+
+        // Wire up button placeholders
         const input = this.view.querySelector('#discover-query');
         const resultsContainer = this.view.querySelector('#discover-results');
+        const btnSelectView = this.view.querySelector('.btnSelectView');
+        const btnSort = this.view.querySelector('.btnSort');
+        const btnFilter = this.view.querySelector('.btnFilter');
+
+        // Sort menu
+        btnSort.addEventListener('click', (e) => {
+            const sortItems = [
+                { name: globalize.translate('Popularity'), id: 'Popularity' },
+                { name: globalize.translate('Name'), id: 'Name' },
+                { name: globalize.translate('ProductionYear'), id: 'ProductionYear' },
+                { name: globalize.translate('OptionRandom'), id: 'Random' }
+            ];
+            libraryBrowser.showSortMenu({
+                items: sortItems,
+                callback: () => {
+                    // Persist the updated sortQuery (which is mutated by the sort menu)
+                    userSettings.saveQuerySettings(this.savedSortKey, this.sortQuery);
+                    if (this.lastQuery.length >= 2) {
+                        doSearch(this.lastQuery);
+                    }
+                },
+                query: this.sortQuery,
+                button: e.currentTarget
+            });
+        });
+
+        btnSelectView.addEventListener('click', () => {
+            // TODO: implement view selection
+        });
+        btnFilter.addEventListener('click', () => {
+            // TODO: implement filter menu
+        });
 
         // Show a simple default screen if nothing is searched yet
         const renderDefaultScreen = () => {
@@ -130,6 +183,11 @@ class DiscoverTab {
             }
         };
 
+        // Helper to apply sortQuery
+        const applySort = (items) => {
+            return items;
+        };
+
         const doSearch = async (query) => {
             if (!query || query.length < 2) {
                 renderDefaultScreen();
@@ -138,10 +196,14 @@ class DiscoverTab {
             setLoading(true);
             try {
                 const apiClient = ServerConnections.currentApiClient();
-                const url = apiClient.getUrl('Discover/Search') + '?query=' + encodeURIComponent(query);
+                let url = apiClient.getUrl('Discover/Search') + '?query=' + encodeURIComponent(query);
+                if (this.sortQuery.SortBy) url += `&sortBy=${encodeURIComponent(this.sortQuery.SortBy)}`;
+                if (this.sortQuery.SortOrder) url += `&sortOrder=${encodeURIComponent(this.sortQuery.SortOrder)}`;
                 const data = await apiClient.getJSON(url);
+                this._lastResults = data;
+                data.Movies = applySort(data.Movies || []);
+                data.Series = applySort(data.Series || []);
                 renderResults(data);
-            // TODO: Remove Error display in production
             } catch (err) {
                 let errorMsg = globalize.translate('Error');
                 if (err && err.status) {
@@ -160,29 +222,16 @@ class DiscoverTab {
         // Use only one lastQuery
         input.addEventListener('input', (e) => {
             const query = e.target.value.trim();
-            if (query === this.lastQuery) return;
+            if (this.lastQuery === query) return;
             this.lastQuery = query;
             clearTimeout(debounceTimeout);
-            debounceTimeout = setTimeout(() => doSearch(query), DEBOUNCE_DELAY_MS);
+            debounceTimeout = setTimeout(() => {
+                doSearch(query);
+            }, DEBOUNCE_DELAY_MS);
         });
 
-        // Patch cardBuilder to use PosterImageUrl if present
-        if (!cardBuilder._discoverPatched) {
-            const origGetImageUrl = cardBuilder.getImageUrl;
-            cardBuilder.getImageUrl = function(item, ...args) {
-                if (item.PosterImageUrl) {
-                    return item.PosterImageUrl;
-                }
-                return origGetImageUrl.call(cardBuilder, item, ...args);
-            };
-            cardBuilder._discoverPatched = true;
-        }
-
-        if (options?.autoFocus) {
-            if (input) {
-                input.focus();
-            }
-        }
+        // Initial search to populate default view
+        doSearch('');
     }
 }
 
