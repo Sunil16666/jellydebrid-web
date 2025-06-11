@@ -1,0 +1,35 @@
+<!--?xml version="1.0" encoding="UTF-8"?-->
+<svg width="1000" height="1500" viewBox="0 0 1000 1500" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Import a web font (edit or remove if your target environment doesn't load web fonts) -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600&amp;display=swap');
+  </style>
+
+  <defs>
+    <!-- Blue↔Purple background gradient -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4e54c8"></stop>
+      <stop offset="100%" stop-color="#8f94fb"></stop>
+    </linearGradient>
+    <!-- Film-reel watermark symbol -->
+    <symbol id="filmReel" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="30" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.15"></circle>
+      <circle cx="20" cy="20" r="6" fill="#ffffff" opacity="0.15"></circle>
+      <circle cx="44" cy="20" r="6" fill="#ffffff" opacity="0.15"></circle>
+      <circle cx="20" cy="44" r="6" fill="#ffffff" opacity="0.15"></circle>
+      <circle cx="44" cy="44" r="6" fill="#ffffff" opacity="0.15"></circle>
+    </symbol>
+  </defs>
+
+  <!-- Full-bleed gradient background -->
+  <rect width="100%" height="100%" fill="url(#bgGradient)"></rect>
+
+  <!-- Centered film-reel watermark -->
+  <use href="#filmReel" x="350" y="400" width="300" height="300"></use>
+
+  <!-- “No Artwork Available” text -->
+  <text x="50%" y="1400" fill="#FFFFFF" font-family="Montserrat, 'Helvetica Neue', Arial, sans-serif" font-size="60" font-weight="600" text-anchor="middle" letter-spacing="1.2">
+    No Artwork Available
+  </text>
+</svg>
