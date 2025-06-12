@@ -37,31 +37,6 @@ class DiscoverTab {
         const input = this.view.querySelector('#discover-query');
         const resultsContainer = this.view.querySelector('#discover-results');
 
-        // Show a simple default screen if nothing is searched yet
-        const renderDefaultScreen = () => {
-            resultsContainer.innerHTML = `
-                <div class="discover-default-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 320px; padding: 3em 0; color: #888;">
-                    <h2 style="font-weight: 600; font-size: 2em; margin-bottom: 0.5em;">${globalize.translate('Discover')}</h2>
-                    <div style="font-size: 1.1em; max-width: 400px; text-align: center;">
-                        ${globalize.translate('Type a search term above to discover new Movies and Series')}
-                    </div>
-                </div>
-            `;
-        };
-        renderDefaultScreen();
-
-        // Render a no results screen when no items match the search
-        const renderNoResultsScreen = () => {
-            resultsContainer.innerHTML = `
-                <div class="discover-noresults-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 320px; padding: 3em 0; color: #888;">
-                    <h2 style="font-weight: 600; font-size: 2em; margin-bottom: 0.5em;">${globalize.translate('No Results')}</h2>
-                    <div style="font-size: 1.1em; max-width: 400px; text-align: center;">
-                        ${globalize.translate('No Movies or Series matched your search. Try a different term.')}
-                    </div>
-                </div>
-            `;
-        };
-
         const renderResults = (data) => {
             if (!data) {
                 resultsContainer.innerHTML = '<div class="emptyResults">' + globalize.translate('Error') + '</div>';
@@ -69,7 +44,7 @@ class DiscoverTab {
             }
             const { Movies = [], Series = [] } = data;
             if ((!Movies || Movies.length === 0) && (!Series || Series.length === 0)) {
-                renderNoResultsScreen();
+                resultsContainer.innerHTML = '<div class="emptyResults">' + globalize.translate('NoResults') + '</div>';
                 return;
             }
             let html = '';
@@ -132,7 +107,7 @@ class DiscoverTab {
 
         const doSearch = async (query) => {
             if (!query || query.length < 2) {
-                renderDefaultScreen();
+                resultsContainer.innerHTML = '';
                 return;
             }
             setLoading(true);
