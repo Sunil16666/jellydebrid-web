@@ -46,8 +46,6 @@ const Home = () => {
         return [{
             name: globalize.translate('Home')
         }, {
-            name: globalize.translate('Discover')
-        }, {
             name: globalize.translate('Favorites')
         }];
     };
@@ -67,10 +65,8 @@ const Home = () => {
             case 0:
                 depends = 'hometab';
                 break;
+
             case 1:
-                depends = 'discover';
-                break;
-            case 2:
                 depends = 'favorites';
         }
 

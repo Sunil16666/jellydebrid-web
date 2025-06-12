@@ -1,3 +1,4 @@
+
 /**
  * Module for building cards from item data.
  * @module components/cardBuilder/cardBuilder
@@ -277,16 +278,6 @@ export function getCardImageUrl(item, apiClient, options, shape) {
     const uiAspect = getDesiredAspect(shape);
     let imgType = null;
     let itemId = null;
-
-    // Check for remote image URLs (e.g., TMDb PosterImageUrl) and use them directly
-    if (item.PosterImageUrl && typeof item.PosterImageUrl === 'string' && item.PosterImageUrl.startsWith('http')) {
-        return {
-            imgUrl: item.PosterImageUrl,
-            blurhash: null,
-            forceName: false,
-            coverImage: false
-        };
-    }
 
     /* eslint-disable sonarjs/no-duplicated-branches */
     if (options.preferThumb && item.ImageTags?.Thumb) {
