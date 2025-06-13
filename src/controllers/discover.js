@@ -10,6 +10,7 @@ import cardBuilder from 'components/cardbuilder/cardBuilder';
 import imageLoader from 'components/images/imageLoader';
 import libraryBrowser from '../scripts/libraryBrowser';
 import * as userSettings from '../scripts/settings/userSettings';
+import { appRouter } from 'components/router/appRouter';
 
 const DEBOUNCE_DELAY_MS = 350;
 
@@ -208,8 +209,38 @@ class DiscoverTab {
                 html += '</div></div>';
             }
             resultsContainer.innerHTML = html;
+
+            // MONKEYWRENCH: Neutralize the hrefs of all relevant links within the cards
+            // to ensure our custom click handler takes precedence.
+            const allCardsInResults = resultsContainer.querySelectorAll('.card');
+            allCardsInResults.forEach(individualCard => {
+                const linksToNeutralize = individualCard.querySelectorAll('a[href]'); // Broaden selector
+                linksToNeutralize.forEach(link => {
+                    link.removeAttribute('href');
+                    // Ensure the link still appears clickable if CSS doesn't cover it
+                    link.style.cursor = 'pointer';
+                });
+            });
+
             imageLoader.lazyChildren(resultsContainer);
         };
+
+        // Add click event listener to resultsContainer
+        // Use capture phase and stop propagation to override other handlers
+        resultsContainer.addEventListener('click', (e) => {
+            const clickedCard = e.target.closest('.card');
+
+            if (clickedCard) {
+                // Prevent default action (e.g., if an underlying element still had one by mistake).
+                e.preventDefault();
+                // Stop the event from bubbling up or capturing down to other handlers
+                // that might also try to navigate based on this click.
+                e.stopPropagation();
+
+                // Perform our desired navigation.
+                appRouter.show('remoteItemDetails?provider=Tmdb&id=550'); // <-- Changed to use imported appRouter
+            }
+        }, true); // <-- Add true here to use the capture phase
 
         const setLoading = (isLoading) => {
             if (isLoading) {
