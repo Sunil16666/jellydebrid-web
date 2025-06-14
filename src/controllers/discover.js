@@ -198,7 +198,7 @@ class DiscoverTab {
                 html += '<h2 class="sectionTitle sectionTitle-cards padded-left">' + globalize.translate('Shows') + '</h2>';
                 html += '<div is="emby-itemscontainer" class="itemsContainer padded-left padded-right vertical-wrap">';
                 html += cardBuilder.getCardsHtml({
-                    items: mapRemoteItems(Shows, 'Shows'),
+                    items: mapRemoteItems(Shows, 'Show'), // Changed 'Shows' to 'Show'
                     shape: 'portrait',
                     context: 'discover',
                     showTitle: true,
@@ -237,8 +237,16 @@ class DiscoverTab {
                 // that might also try to navigate based on this click.
                 e.stopPropagation();
 
-                // Perform our desired navigation.
-                appRouter.show('remoteItemDetails?provider=Tmdb&id=550'); // <-- Changed to use imported appRouter
+                const itemId = clickedCard.dataset.id;
+                const itemType = clickedCard.dataset.type; // Will be 'Movie' or 'Show'
+
+                if (itemId && itemType) {
+                    // Perform our desired navigation.
+                    const route = `remoteItemDetails?provider=Tmdb&id=${itemId}&type=${itemType}`;
+                    appRouter.show(route);
+                } else {
+                    console.error('Card is missing data-id or data-type attribute', clickedCard);
+                }
             }
         }, true); // <-- Add true here to use the capture phase
 

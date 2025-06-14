@@ -1,384 +1,424 @@
 // remoteItemDetails/index.js
-// import { getBackdropImageUrl } from '../../scripts/dom.js';
-// import loading from 'components/loading/loading';
-// import ServerConnections from 'jellyfin-apiclient';
-// import globalize from '../../scripts/globalize'; // For translating labels if needed
-// import itemHelper from '../../components/itemHelper'; // For utility functions
+// This file is an adaptation of the original itemDetails/index.js, modified to work with mock remote data.
+import { ServerConnections } from 'lib/jellyfin-apiclient'; // Changed import
+import loading from '../../components/loading/loading';
+import globalize from 'lib/globalize';
+import itemHelper from '../../components/itemHelper'; // For getDisplayRuntime
 
-const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
+const TMDB_IMAGE_BASE_URL_W500 = 'https://image.tmdb.org/t/p/w500';
+const TMDB_IMAGE_BASE_URL_W1280 = 'https://image.tmdb.org/t/p/w1280';
+const TMDB_IMAGE_BASE_URL_ORIGINAL = 'https://image.tmdb.org/t/p/original';
 
-// Expanded Mock data
-const getMockRemoteItemDetails = (provider, id) => {
-    console.log(`[RemoteDetails] Fetching mock data for ${provider} - ${id}`);
-    return new Promise(resolve => {
-        setTimeout(() => {
-            if (provider === 'Tmdb' && id === '550') { // Fight Club
-                resolve({
-                    name: 'Fight Club (Mock)',
-                    tagline: 'Mischief. Mayhem. Soap.',
-                    overview: 'A ticking-time-bomb insomniac and a slippery soap salesman channel primal male aggression into a shocking new form of therapy. Their concept catches on, with underground "fight clubs" forming in every town, until an eccentric gets in the way and ignites an out-of-control spiral towards oblivion.',
-                    providerIds: { Tmdb: '550' },
-                    providerName: 'TMDb',
-                    itemType: 'Movie',
-                    productionYear: 1999,
-                    runtimeMinutes: 139,
-                    officialRating: 'R', // MPAA Rating
-                    communityRating: 8.4, // e.g., TMDb rating
-                    genres: ['Drama', 'Thriller', 'Dark Comedy'],
-                    studios: [{ Name: 'Fox 2000 Pictures' }, { Name: 'Regency Enterprises' }],
-                    people: [
-                        { Name: 'David Fincher', Type: 'Director' },
-                        { Name: 'Jim Uhls', Type: 'Writer' },
-                        { Name: 'Edward Norton', Type: 'Actor', Role: 'The Narrator' },
-                        { Name: 'Brad Pitt', Type: 'Actor', Role: 'Tyler Durden' },
-                        { Name: 'Helena Bonham Carter', Type: 'Actor', Role: 'Marla Singer' }
-                    ],
-                    images: {
-                        primary: '/rUPKPWBpr2ZbDXXZpT0qgYqTlG9.jpg', // Poster path
-                        backdrop: '/xRyINp9KfMLVjRiO5nCsoRDdvvF.jpg', // Backdrop path
-                        logo: '/ayYwAnf7WQoOE7npYuBxat9jfhv.png' // Logo path
-                    }
-                    // Fields that might be in itemDetails but less relevant for pure remote items (can be placeholders)
-                    // For example, local server specific fields:
-                    // Id: 'mock-remote-550', // A unique ID for this item in the context of this page
-                    // ServerId: 'mock-server',
-                    // CanDelete: false,
-                    // CanDownload: false,
-                    // MediaSources: [], // For track selections, if we ever support them for remote
-                });
-            } else {
-                resolve(null);
-            }
-        }, 500);
-    });
-};
-
-function getTmdbImageUrl(path, size = 'w500') { // Default size w500
-    if (!path) return '';
-    // Path should already start with / if it's a TMDb path, ensure it for robustness
-    const imagePath = path.startsWith('/') ? path : `/${path}`;
-    return `${TMDB_IMAGE_BASE_URL}${size}${imagePath}`;
+// Utility to escape HTML
+function escapeHtml(unsafe) {
+    if (unsafe === null || typeof unsafe === 'undefined') return '';
+    return unsafe
+        .toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
-// --- DOM Rendering Functions ---
+function getMovieId(params) {
+    return params.id;
+}
 
-function renderName(page, item) {
-    // The original itemDetails uses a complex renderName. We'll simplify for now.
-    const nameContainer = page.querySelector('.nameContainer');
+function renderPrimaryDetails(page, movie) {
+    // Name / Title
+    const nameContainer = page.querySelector('.nameContainer h1 bdi');
     if (nameContainer) {
-        // Clear existing content (e.g. placeholders)
-        nameContainer.innerHTML = '';
-        const nameElement = document.createElement('h1');
-        nameElement.textContent = item.name || 'Unknown Title';
-        nameContainer.appendChild(nameElement);
-        // The original also appends original title if different, we can add later.
+        nameContainer.textContent = movie.Title || '';
     }
-}
-
-function renderImage(page, item) {
-    const imageContainer = page.querySelector('.detailImageContainer');
-    if (imageContainer) {
-        if (item.images && item.images.primary) {
-            const imageUrl = getTmdbImageUrl(item.images.primary, 'w220_and_h330_face');
-            imageContainer.innerHTML = `<img src="${imageUrl}" alt="${item.name || 'Poster'}" style="display: block; width: 100%; max-width: 220px; height: auto; border-radius: 8px;" />`;
-            imageContainer.style.backgroundColor = 'transparent';
+    const originalTitleContainer = page.querySelector('.nameContainer .secondaryName');
+    if (originalTitleContainer) {
+        if (movie.OriginalTitle && movie.OriginalTitle !== movie.Title) {
+            originalTitleContainer.textContent = movie.OriginalTitle;
+            originalTitleContainer.classList.remove('hide');
         } else {
-            imageContainer.innerHTML = ''; // Or a placeholder
-            imageContainer.style.backgroundColor = '#222'; // Dark placeholder
+            originalTitleContainer.classList.add('hide');
         }
     }
-}
 
-function renderBackdrop(page, item) {
-    const backdropElement = page.querySelector('#itemBackdrop');
-    if (backdropElement) {
-        if (item.images && item.images.backdrop) {
-            const backdropUrl = getTmdbImageUrl(item.images.backdrop, 'original'); // Use 'original' for backdrop
-            backdropElement.style.backgroundImage = `url('${backdropUrl}')`;
-            // Standard backdrop styling from itemDetails.scss (selfBackdropPage)
-            // might handle opacity, but we can enforce here if needed.
-            // backdropElement.style.opacity = 0.3; // Example, adjust as needed
-        } else {
-            backdropElement.style.backgroundImage = 'none';
-        }
-    }
-}
-
-function renderLogo(page, item) {
-    const logoElement = page.querySelector('.detailLogo');
-    if (logoElement) {
-        if (item.images && item.images.logo) {
-            const logoUrl = getTmdbImageUrl(item.images.logo, 'w500'); // Use w500 for logo (constrained by CSS)
-            logoElement.innerHTML = `<img src="${logoUrl}" alt="${item.name || ''} Logo" style="max-height: 100px; max-width: 350px; margin-bottom: 1em;" />`;
-            logoElement.classList.remove('hide');
-        } else {
-            logoElement.innerHTML = '';
-            logoElement.classList.add('hide');
-        }
-    }
-}
-
-function renderMiscInfoPrimary(page, item) {
-    const miscInfoPrimary = page.querySelector('.itemMiscInfo-primary');
-    if (miscInfoPrimary) {
-        let html = '';
-        if (item.productionYear) {
-            html += `<span class="itemYear">${item.productionYear}</span>`;
-        }
-        if (item.runtimeMinutes) {
-            // Assuming itemHelper.getDisplayRuntime is available or reimplement
-            // For now, simple display:
-            const hours = Math.floor(item.runtimeMinutes / 60);
-            const minutes = item.runtimeMinutes % 60;
-            html += `<span class="itemRuntime" style="margin-left: 10px;">${hours}h ${minutes}m</span>`;
-        }
-        if (item.officialRating) {
-            html += `<span class="itemRating" style="margin-left: 10px;">${item.officialRating}</span>`;
-        }
-        // Add community rating, etc.
-        if (item.communityRating) {
-            html += `<span class="itemCommunityRating" style="margin-left: 10px;"><span class="material-icons star" style="font-size: inherit; vertical-align: sub;">star</span> ${item.communityRating.toFixed(1)}</span>`;
-        }
-        miscInfoPrimary.innerHTML = html;
-    }
-}
-
-function renderMiscInfoSecondary(page, item) {
-    const miscInfoSecondary = page.querySelector('.itemMiscInfo-secondary');
-    if (miscInfoSecondary) {
-        // For remote items, this might show provider info or other details
-        let html = '';
-        if (item.providerName) {
-            html += `Provider: ${item.providerName}`;
-        }
-        if (item.itemType) {
-            html += ` (${item.itemType})`;
-        }
-        miscInfoSecondary.innerHTML = html;
-        if (html) miscInfoSecondary.classList.remove('hide');
-        else miscInfoSecondary.classList.add('hide');
-    }
-}
-
-function renderTagline(page, item) {
-    const taglineElement = page.querySelector('.tagline');
-    if (taglineElement) {
-        taglineElement.textContent = item.tagline || '';
-        if (item.tagline) taglineElement.classList.remove('hide');
-        else taglineElement.classList.add('hide');
-    }
-}
-
-function renderOverview(page, item) {
-    const overviewElement = page.querySelector('.overview');
+    // Overview
+    const overviewElement = page.querySelector('.overview bdi');
     if (overviewElement) {
-        overviewElement.textContent = item.overview || 'No overview available.';
+        overviewElement.innerHTML = movie.Overview ? `<p>${escapeHtml(movie.Overview)}</p>` : '';
     }
-}
 
-function renderGenres(page, item) {
-    const genresContainer = page.querySelector('.genresGroup .genres');
+    // Tagline
+    const taglineElement = page.querySelector('.tagline bdi');
+    if (taglineElement) {
+        taglineElement.textContent = movie.Tagline || '';
+        if (!movie.Tagline) {
+            page.querySelector('.tagline').classList.add('hide');
+        } else {
+            page.querySelector('.tagline').classList.remove('hide');
+        }
+    }
+
+    // Genres (now in itemDetailsGroup)
     const genresGroup = page.querySelector('.genresGroup');
-    const genresLabel = page.querySelector('.genresGroup .genresLabel');
-
-    if (genresContainer && genresGroup && genresLabel) {
-        if (item.genres && item.genres.length) {
-            // Assuming globalize.translate is available
-            genresLabel.textContent = item.genres.length > 1 ? 'Genres' : 'Genre';
-            // The original itemDetails uses clickable links. For now, just text.
-            genresContainer.innerHTML = item.genres.map(g => `<span style="margin-right: 5px;">${g}</span>`).join(', ');
+    if (genresGroup) {
+        const genresLabel = genresGroup.querySelector('.genresLabel');
+        const genresContent = genresGroup.querySelector('.genres.content');
+        if (movie.Genres && movie.Genres.length) {
+            if (genresLabel) genresLabel.textContent = globalize.translate('Genres');
+            if (genresContent) genresContent.innerHTML = movie.Genres.map(g => `<a class="itemGenreButton" href="#">${escapeHtml(g.Name)}</a>`).join('');
             genresGroup.classList.remove('hide');
         } else {
             genresGroup.classList.add('hide');
         }
     }
-}
 
-function renderPeopleList(page, item, options) {
-    const {
-        type,
-        containerSelector,
-        groupSelector,
-        labelSelector,
-        labelSingular,
-        labelPlural
-    } = options;
-
-    const container = page.querySelector(containerSelector);
-    const group = page.querySelector(groupSelector);
-    const labelEl = page.querySelector(labelSelector);
-
-    if (!container || !group || !labelEl) return;
-
-    const people = (item.people || []).filter(p => p.Type === type);
-    if (people.length) {
-        labelEl.textContent = people.length > 1 ? labelPlural : labelSingular;
-        // Original uses clickable links. For now, just text.
-        container.innerHTML = people.map(p => {
-            let text = p.Name;
-            if (p.Role) text += ` (as ${p.Role})`;
-            return `<span style="margin-right: 10px;">${text}</span>`;
-        }).join(', ');
-        group.classList.remove('hide');
-    } else {
-        group.classList.add('hide');
+    // Release Date, Runtime (Misc Info Primary)
+    const miscInfoPrimary = page.querySelector('.itemMiscInfo-primary');
+    if (miscInfoPrimary) {
+        let html = '';
+        if (movie.ReleaseDate) { // Changed to movie.ReleaseDate
+            const year = movie.ReleaseDate.split('-')[0]; // Changed to movie.ReleaseDate
+            html += `<span>${year}</span>`;
+        }
+        if (movie.Runtime) { // Changed to movie.Runtime
+            html += `<span>${itemHelper.getDisplayRuntime(movie.Runtime * 60 * 1000)}</span>`; // Changed to movie.Runtime
+        }
+        miscInfoPrimary.innerHTML = html;
     }
-}
 
-function renderDirectors(page, item) {
-    renderPeopleList(page, item, {
-        type: 'Director',
-        containerSelector: '.directorsGroup .directors',
-        groupSelector: '.directorsGroup',
-        labelSelector: '.directorsGroup .directorsLabel',
-        labelSingular: 'Director',
-        labelPlural: 'Directors'
-    });
-}
-
-function renderWriters(page, item) {
-    renderPeopleList(page, item, {
-        type: 'Writer',
-        containerSelector: '.writersGroup .writers',
-        groupSelector: '.writersGroup',
-        labelSelector: '.writersGroup .writersLabel',
-        labelSingular: 'Writer',
-        labelPlural: 'Writers'
-    });
-}
-
-function renderStudios(page, item) {
-    const studiosContainer = page.querySelector('.studiosGroup .studios');
-    const studiosGroup = page.querySelector('.studiosGroup');
-    const studiosLabel = page.querySelector('.studiosGroup .studiosLabel');
-
-    if (studiosContainer && studiosGroup && studiosLabel) {
-        if (item.studios && item.studios.length) {
-            studiosLabel.textContent = item.studios.length > 1 ? 'Studios' : 'Studio';
-            // Original uses clickable links. For now, just text.
-            studiosContainer.innerHTML = item.studios.map(s => `<span style="margin-right: 10px;">${s.Name}</span>`).join(', ');
-            studiosGroup.classList.remove('hide');
+    // Directors, Writers (Misc Info Secondary) - Now in itemDetailsGroup
+    const directorsGroup = page.querySelector('.directorsGroup');
+    if (directorsGroup) {
+        const directorsLabel = directorsGroup.querySelector('.directorsLabel');
+        const directorsContent = directorsGroup.querySelector('.directors.content');
+        if (movie.Directors && movie.Directors.length) {
+            if (directorsLabel) directorsLabel.textContent = globalize.translate('Directors');
+            if (directorsContent) directorsContent.innerHTML = movie.Directors.map(d => `<a href="#">${escapeHtml(d.Name)}</a>`).join(', ');
+            directorsGroup.classList.remove('hide');
         } else {
-            studiosGroup.classList.add('hide');
+            directorsGroup.classList.add('hide');
+        }
+    }
+
+    const writersGroup = page.querySelector('.writersGroup');
+    if (writersGroup) {
+        const writersLabel = writersGroup.querySelector('.writersLabel');
+        const writersContent = writersGroup.querySelector('.writers.content');
+        if (movie.Writers && movie.Writers.length) {
+            if (writersLabel) writersLabel.textContent = globalize.translate('Writers');
+            if (writersContent) writersContent.innerHTML = movie.Writers.map(w => `<a href="#">${escapeHtml(w.Name)}</a>`).join(', ');
+            writersGroup.classList.remove('hide');
+        } else {
+            writersGroup.classList.add('hide');
+        }
+    }
+
+    // Poster Image
+    const posterImageContainer = page.querySelector('.detailImageContainer .cardImageContainer.coveredImage');
+    if (posterImageContainer) {
+        if (movie.PosterPath) {
+            const imageUrl = `${TMDB_IMAGE_BASE_URL_W500}${movie.PosterPath}`;
+            posterImageContainer.style.backgroundImage = `url('${imageUrl}')`;
+            posterImageContainer.classList.add('lazy'); // For potential lazy loading CSS
+        } else {
+            // Show a placeholder if no poster
+            posterImageContainer.innerHTML = '<div class="cardImageIcon material-icons movie" style="font-size: 5em; text-align: center; padding: 20px; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"></div>';
+            posterImageContainer.style.backgroundImage = ''; // Clear any previous image
         }
     }
 }
 
-// Main render function
-function renderDetails(page, item) {
-    console.log('[RemoteDetailsController] renderDetails for item:', item);
-    if (!item) {
-        console.error('[RemoteDetailsController] Item data is null, cannot render.');
-        // Potentially clear the page or show a more prominent error
-        const nameContainer = page.querySelector('.nameContainer');
-        if (nameContainer) nameContainer.innerHTML = '<p>Error: Item data not found.</p>';
-        return;
+function renderBackdropAndLogo(page, movie) {
+    const itemBackdrop = page.querySelector('#itemBackdrop');
+    if (itemBackdrop) {
+        if (movie.BackdropPath) {
+            const backdropUrl = `${TMDB_IMAGE_BASE_URL_W1280}${movie.BackdropPath}`;
+            itemBackdrop.style.backgroundImage = `url('${backdropUrl}')`;
+            itemBackdrop.classList.remove('hide');
+        } else {
+            itemBackdrop.style.backgroundImage = 'none';
+            itemBackdrop.classList.add('hide');
+        }
     }
 
-    renderBackdrop(page, item);
-    renderLogo(page, item);
-    renderImage(page, item); // Poster
-    renderName(page, item);
-    renderMiscInfoPrimary(page, item);
-    renderMiscInfoSecondary(page, item);
-    renderTagline(page, item);
-    renderOverview(page, item);
-
-    // Detail groups
-    renderGenres(page, item);
-    renderDirectors(page, item);
-    renderWriters(page, item);
-    renderStudios(page, item);
-
-    // Hide sections for which we don't have data or aren't implementing yet
-    // Example: Track selections, recording fields, various collapsible sections
-    const trackSelectionsForm = page.querySelector('.trackSelections');
-    if (trackSelectionsForm) trackSelectionsForm.classList.add('hide');
-
-    const recordingFields = page.querySelector('.recordingFields');
-    if (recordingFields) recordingFields.classList.add('hide');
-
-    // Hide all collapsible sections for now, can be shown as implemented
-    page.querySelectorAll('.verticalSection.detailVerticalSection').forEach(el => {
-        if (!el.classList.contains('genresGroup')
-            && !el.classList.contains('directorsGroup')
-            && !el.classList.contains('writersGroup')
-            && !el.classList.contains('studiosGroup')) {
-            // Check if it's part of the itemDetailsGroup before hiding, or use more specific selectors
-            // For simplicity, this might hide more than intended if not careful with class names.
-            // A better approach is to explicitly hide sections we are not populating.
+    const detailLogo = page.querySelector('.detailLogo');
+    if (detailLogo) {
+        if (movie.LogoPath) { // Assuming DTO might have LogoPath
+            const logoUrl = `${TMDB_IMAGE_BASE_URL_ORIGINAL}${movie.LogoPath}`;
+            detailLogo.style.backgroundImage = `url('${logoUrl}')`;
+            // The HTML already has lazy classes, so just ensure it's visible
+            detailLogo.classList.remove('hide');
+        } else {
+            detailLogo.style.backgroundImage = 'none';
+            detailLogo.classList.add('hide');
         }
-    });
-    // Explicitly hide sections we are not ready for:
-    ['#seriesTimerScheduleSection', '.collectionItems', '.nextUpSection', '.programGuideSection', '#childrenCollapsible', '#additionalPartsCollapsible', '.moreFromSeasonSection', '#lyricsSection', '.moreFromArtistSection', '#castCollapsible', '#guestCastCollapsible', '#seriesScheduleSection', '#specialsCollapsible', '#musicVideosCollapsible', '#scenesCollapsible', '#similarCollapsible'].forEach(selector => {
-        const el = page.querySelector(selector);
-        if (el) el.classList.add('hide');
-    });
-
-    // Buttons - for now, just ensure they are hidden as we don't have actions
-    page.querySelectorAll('.mainDetailButtons button').forEach(btn => {
-        btn.classList.add('hide');
-    });
-    // We might want to show a placeholder in .mainDetailButtons if all are hidden.
-    const mainButtonsContainer = page.querySelector('.mainDetailButtons');
-    if (mainButtonsContainer) mainButtonsContainer.innerHTML = '<p>Action buttons (e.g., Add to Library, Play Trailer) will appear here.</p>';
+    }
 }
 
-class RemoteItemDetailsController {
-    constructor(view, params) {
-        this.view = view;
-        this.params = params;
-        this.apiClient = window.ServerConnections?.currentApiClient?.();
+function renderCast(page, movie) {
+    const castContent = page.querySelector('#castCollapsible .scrollSlider'); // Adjusted selector for new structure
+    const castCollapsible = page.querySelector('#castCollapsible');
 
-        console.log('[RemoteDetailsController] Constructed. View:', view ? view.id : 'undefined');
-        console.log('[RemoteDetailsController] Constructed. Params:', params);
-        this.loadData();
+    if (!castContent || !castCollapsible) return;
+
+    const castMembers = movie.Credits ? movie.Credits.Cast : [];
+
+    if (castMembers && castMembers.length > 0) {
+        const html = castMembers.slice(0, 20).map(person => {
+            const imageUrl = person.ProfilePath ? `${TMDB_IMAGE_BASE_URL_W500}${person.ProfilePath}` : null;
+            return `
+                <div class="card personCard" data-id="${person.Id}" data-type="Person">
+                    <div class="cardBox visualCardBox">
+                        <div class="cardScalable">
+                            <div class="cardPadder cardPadder-person"></div>
+                            <div class="cardContent">
+                                ${imageUrl ? `<img src="${imageUrl}" class="cardImage" loading="lazy" alt="${escapeHtml(person.Name)}"/>` : '<div class="cardImage cardImageIcon material-icons person" aria-hidden="true"></div>'}
+                            </div>
+                        </div>
+                        <div class="cardFooter">
+                            <div class="cardText">${escapeHtml(person.Name)}</div>
+                            <div class="cardText cardText-secondary">${escapeHtml(person.Character)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        castContent.innerHTML = html;
+        // peopleHeader text is set in HTML by ${HeaderCastAndCrew}
+        castCollapsible.classList.remove('hide');
+    } else {
+        castCollapsible.classList.add('hide');
+    }
+}
+
+function renderRecommendations(page, movie) {
+    const similarContent = page.querySelector('#similarCollapsible .scrollSlider.similarContent'); // Adjusted selector
+    const similarCollapsible = page.querySelector('#similarCollapsible');
+
+    if (!similarContent || !similarCollapsible) return;
+
+    const recommendations = movie.Recommendations ? movie.Recommendations.Results : [];
+
+    if (recommendations && recommendations.length > 0) {
+        const html = recommendations.slice(0, 10).map(rec => {
+            const imageUrl = rec.PosterPath ? `${TMDB_IMAGE_BASE_URL_W500}${rec.PosterPath}` : null;
+            const linkUrl = `#!/remoteitemdetails.html?id=${rec.Id}&type=movie`; // Ensure type is passed if needed
+            return `
+                <a href="${linkUrl}" class="card backdropCard" data-id="${rec.Id}" data-type="Movie">
+                    <div class="cardBox visualCardBox">
+                        <div class="cardScalable">
+                            <div class="cardPadder cardPadder-backdrop"></div>
+                            <div class="cardContent">
+                                 ${imageUrl ? `<img src="${imageUrl}" class="cardImage" loading="lazy" alt="${escapeHtml(rec.Title)}"/>` : '<div class="cardImage cardImageIcon material-icons movie" aria-hidden="true"></div>'}
+                            </div>
+                        </div>
+                        <div class="cardFooter">
+                            <div class="cardText">${escapeHtml(rec.Title)}</div>
+                            ${rec.ReleaseDate ? `<div class="cardText cardText-secondary">${rec.ReleaseDate.split('-')[0]}</div>` : ''}
+                        </div>
+                    </div>
+                </a>
+            `;
+        }).join('');
+        similarContent.innerHTML = html;
+        similarCollapsible.classList.remove('hide');
+    } else {
+        similarCollapsible.classList.add('hide');
+    }
+}
+
+function renderCollectionInfo(page, movie) {
+    const collectionSection = page.querySelector('.collectionItems.verticalSection'); // Target the main section
+    if (!collectionSection) return;
+
+    const collection = movie.BelongsToCollection;
+
+    if (collection) {
+        const collectionItemsContainer = collectionSection.querySelector('.scrollSlider.itemsContainer');
+        if (!collectionItemsContainer) return;
+
+        let html = '';
+        // The H2 title is already in the HTML: <h2 class="sectionTitle sectionTitle-cards padded-right">${HeaderCollection}</h2>
+        // We just need to build the card itself
+        const imagePath = collection.PosterPath || collection.BackdropPath;
+        const imageUrl = imagePath ? `${TMDB_IMAGE_BASE_URL_W500}${imagePath}` : null;
+
+        html += `<div class="card backdropCard" data-id="${collection.Id}" data-type="BoxSet">`; // Assuming BoxSet type for collections
+        html += '<div class="cardBox visualCardBox">';
+        html += '<div class="cardScalable">';
+        html += '<div class="cardPadder cardPadder-backdrop"></div>';
+        html += '<div class="cardContent">';
+        if (imageUrl) {
+            html += `<img src="${imageUrl}" class="cardImage" loading="lazy" alt="${escapeHtml(collection.Name)}"/>`;
+        } else {
+            html += '<div class="cardImage cardImageIcon material-icons collections" aria-hidden="true"></div>';
+        }
+        html += '</div></div>';
+        html += `<div class="cardFooter"><div class="cardText">${escapeHtml(collection.Name)}</div></div>`;
+        html += '</div>'; // Closing cardBox
+        html += '</div>'; // Closing card
+
+        collectionItemsContainer.innerHTML = html;
+        collectionSection.classList.remove('hide');
+    } else {
+        collectionSection.classList.add('hide');
+    }
+}
+
+function renderStudios(page, movie) {
+    const studiosGroup = page.querySelector('.studiosGroup');
+    if (!studiosGroup) return;
+
+    const companies = movie.ProductionCompanies;
+    if (companies && companies.length > 0) {
+        const studiosLabel = studiosGroup.querySelector('.studiosLabel.label');
+        const studiosContent = studiosGroup.querySelector('.studios.content');
+
+        if (studiosLabel) studiosLabel.textContent = globalize.translate('Studios'); // Or 'ProductionStudios'
+        if (studiosContent) {
+            studiosContent.innerHTML = companies.map(s => `<a href="#">${escapeHtml(s.Name)}</a>`).join(', ');
+        }
+        studiosGroup.classList.remove('hide');
+    } else {
+        studiosGroup.classList.add('hide');
+    }
+}
+
+function setupTrailerButton(page, movie) {
+    const btnPlayTrailer = page.querySelector('.btnPlayTrailer');
+    if (!btnPlayTrailer) return;
+
+    let trailerVideo = null;
+    if (movie.Videos && movie.Videos.Results) {
+        trailerVideo = movie.Videos.Results.find(v => v.Site === 'YouTube' && v.Type === 'Trailer');
     }
 
-    async loadData() {
-        console.log('[RemoteDetailsController] loadData. View:', this.view ? this.view.id : 'undefined');
-        const { provider, id } = this.params;
+    if (trailerVideo && trailerVideo.Key) { // Check trailerVideo.Key
+        btnPlayTrailer.classList.remove('hide');
+        btnPlayTrailer.onclick = () => {
+            // It's better to use the official YouTube embed or a library if possible,
+            // but for simplicity, window.open is used here.
+            window.open(`https://www.youtube.com/watch?v=${trailerVideo.Key}`, '_blank');
+        };
+    } else {
+        btnPlayTrailer.classList.add('hide');
+    }
+}
 
-        if (!this.view) {
-            console.error('[RemoteDetailsController] View is not available in loadData.');
-            return;
-        }
-        if (!provider || !id) {
-            console.error('[RemoteDetailsController] Missing provider or id.');
-            this.view.querySelector('.nameContainer').innerHTML = '<p>Error: Missing provider or ID.</p>';
-            return;
-        }
+function hideUnavailableButtons(page) {
+    // Hide buttons not applicable to remote items by default
+    // Specific logic in other render functions will show them if data exists (e.g. trailer)
+    const buttonsToAlwaysHide = [
+        '.btnPlay', // Play/Resume will depend on if it can be played (future feature)
+        '.btnReplay',
+        '.btnDownload',
+        '.btnInstantMix',
+        '.btnShuffle',
+        '.btnCancelSeriesTimer',
+        '.btnCancelTimer',
+        '.btnPlaystate',
+        '.btnUserRating', // Rating might be possible with different backend
+        '.btnSplitVersions'
+        // '.btnMoreCommands' // Keep this, might have "Identify" or other relevant actions later
+    ];
+    buttonsToAlwaysHide.forEach(selector => {
+        const btn = page.querySelector(selector);
+        if (btn) btn.classList.add('hide');
+    });
 
-        // Use global loading if available
-        if (window.loading && typeof window.loading.show === 'function') window.loading.show();
+    // Show trailer and more commands button by default, their specific render functions will hide if no data
+    const btnTrailer = page.querySelector('.btnPlayTrailer');
+    if (btnTrailer) btnTrailer.classList.remove('hide'); // setupTrailerButton will hide if no trailer
 
-        try {
-            const item = await getMockRemoteItemDetails(provider, id);
-            if (item) {
-                renderDetails(this.view, item);
-            } else {
-                this.view.querySelector('.nameContainer').innerHTML = `<p>Could not load details for ${provider} ID ${id}.</p>`;
+    const btnMore = page.querySelector('.btnMoreCommands');
+    if (btnMore) btnMore.classList.remove('hide');
+
+    // Hide sections that are typically for library items or not yet supported for remote
+    const sectionsToHide = [
+        '.trackSelections', // No versions/tracks for remote TMDB items
+        '.recordingFields',
+        '#seriesTimerScheduleSection',
+        '.nextUpSection', // No next up for non-library
+        '.programGuideSection',
+        '#additionalPartsCollapsible',
+        '.moreFromSeasonSection',
+        '#lyricsSection',
+        '.moreFromArtistSection',
+        '#seriesScheduleSection',
+        '#specialsCollapsible', // Could be shown if TMDb provides this data and DTO supports
+        '#musicVideosCollapsible', // "
+        '#scenesCollapsible', // "
+        '#guestCastCollapsible' // Guest cast is part of main cast from TMDb, not separate
+    ];
+    sectionsToHide.forEach(selector => {
+        const section = page.querySelector(selector);
+        if (section) section.classList.add('hide');
+    });
+}
+
+// Make sure to adjust the main function if movie.title was used for document.title
+export default function (view, params) {
+    const page = view;
+    const movieId = getMovieId(params);
+    const currentApiClient = ServerConnections.currentApiClient();
+
+    console.log('[RemoteDetails] Initializing for movieId:', movieId, 'Params:', params);
+
+    hideUnavailableButtons(page);
+
+    if (movieId && currentApiClient) {
+        loading.show();
+        console.log(`[RemoteDetails] Fetching data for movieId: ${movieId}`);
+        currentApiClient.getJSON(currentApiClient.getUrl(`/ExternalMetadata/Movie?movieId=${movieId}`)).then(movie => {
+            console.log('[RemoteDetails] Movie data received:', JSON.parse(JSON.stringify(movie)));
+
+            document.title = movie.Title ? movie.Title + ' - ' + globalize.translate('Details') : globalize.translate('Details'); // Changed to movie.Title
+
+            console.log('[RemoteDetails] Calling renderBackdropAndLogo');
+            renderBackdropAndLogo(page, movie);
+            console.log('[RemoteDetails] Calling renderPrimaryDetails');
+            renderPrimaryDetails(page, movie);
+            console.log('[RemoteDetails] Calling renderCast');
+            renderCast(page, movie);
+            console.log('[RemoteDetails] Calling renderRecommendations');
+            renderRecommendations(page, movie);
+            console.log('[RemoteDetails] Calling renderCollectionInfo');
+            renderCollectionInfo(page, movie);
+            console.log('[RemoteDetails] Calling renderStudios');
+            renderStudios(page, movie);
+            console.log('[RemoteDetails] Calling setupTrailerButton');
+            setupTrailerButton(page, movie);
+
+            loading.hide();
+        }).catch(error => {
+            loading.hide();
+            console.error('[RemoteDetails] Failed to load remote item details for ID: ' + movieId, error); // Log error
+            const nameContainer = page.querySelector('.nameContainer');
+            if (nameContainer) {
+                nameContainer.innerHTML = `<h1>${globalize.translate('ErrorLoadingData')}</h1><p>${escapeHtml(error.message || 'Unknown error')}</p>`;
             }
-        } catch (error) {
-            console.error('[RemoteDetailsController] Error loading data:', error);
-            this.view.querySelector('.nameContainer').innerHTML = '<p>Error loading details.</p>';
-        } finally {
-            if (window.loading && typeof window.loading.hide === 'function') window.loading.hide();
+            document.title = globalize.translate('Error');
+        });
+    } else {
+        loading.hide(); // Ensure loading is hidden
+        const nameContainer = page.querySelector('.nameContainer');
+        let errorMessage = globalize.translate('Error');
+        if (!movieId) {
+            console.error('No movie ID provided for remote item details page.');
+            if (nameContainer) {
+                nameContainer.innerHTML = `<h1>${globalize.translate('ErrorNoId')}</h1>`;
+            }
+        } else if (!currentApiClient) {
+            console.error('API client is not available.');
+            if (nameContainer) {
+                nameContainer.innerHTML = `<h1>${globalize.translate('ErrorApiClientNotAvailable')}</h1>`;
+            }
+            errorMessage = globalize.translate('ErrorApiClientNotAvailable');
         }
+        document.title = errorMessage;
     }
 
-    onResume(options) {
-        console.log('[RemoteDetailsController] onResume. Options:', options);
-        this.loadData(); // Reload data when view is resumed
-    }
-
-    onPause() {
-        console.log('[RemoteDetailsController] onPause');
-    }
-
-    destroy() {
-        console.log('[RemoteDetailsController] destroy');
-    }
+    view.addEventListener('viewdestroy', () => {
+        // Cleanup logic if any event listeners were added directly
+    });
 }
-
-export default RemoteItemDetailsController;
